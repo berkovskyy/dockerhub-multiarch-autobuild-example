@@ -18,12 +18,20 @@ chmod +x manifest-tool
 arch_to_manifest_platform()
 {
   case "$1" in
-    amd64)
-      printf "os: linux\narchitecture: amd64\n" ;;
-    aarch64)
-      printf "os: linux\narchitecture: arm64\nvariant: v8\n" ;;
-    armhf)
-      printf "os: linux\narchitecture: arm\nvariant: v6\n" ;;
+    "amd64")
+      echo "os: linux"
+      echo "architecture: amd64"
+    ;;
+    "aarch64")
+      echo "os: linux"
+      echo "architecture: arm64"
+      echo "variant: v8"
+    ;;
+    "armhf")
+      echo "os: linux"
+      echo "architecture: arm"
+      echo "variant: v6"
+    ;;
     *)
       echo "Failed to generate manifest platform, unknown architecture '$1'"
       exit 1
@@ -31,27 +39,31 @@ arch_to_manifest_platform()
   esac
 }
 
-# Collect architectures from dockerfiles and create manifest for manifest-tools
+# Collect architectures from dockerfiles located in the same dir as
+# current Dockerfile and use their filenames to create manifest list for manifest-tools
 generate_manifest_list()
 {
+  # Use tag prefix if it is present in current image tag
   if [[ "$DOCKER_TAG" == *"-"* ]]; then
-    DOCKER_TAG_PREFIX=$(echo "$DOCKER_TAG" | cut -d '-' -f 1)
-    DOCKER_DST_REPO="$DOCKER_REPO:$DOCKER_TAG_PREFIX"
-    DOCKER_TAG_PREFIX="$DOCKER_TAG_PREFIX-"
+    DOCKERHUB_TAG_PREFIX=$(echo "$DOCKER_TAG" | cut -d '-' -f 1)
+    DOCKERHUB_DST_REPO="$DOCKER_REPO:$DOCKERHUB_TAG_PREFIX"
+    DOCKERHUB_TAG_PREFIX="$DOCKERHUB_TAG_PREFIX-"
   else
-    DOCKER_DST_REPO="$DOCKER_REPO:latest"
-    DOCKER_TAG_PREFIX=""
+    DOCKERHUB_DST_REPO="$DOCKER_REPO:latest"
+    DOCKERHUB_TAG_PREFIX=""
   fi
-  echo "image: $DOCKER_DST_REPO"
+  
+  echo "image: $DOCKERHUB_DST_REPO"
   echo "manifests:"
 
+  # Look for neighbouring dockerfiles, add 
   DOCKERFILE_DIR=$(dirname "$DOCKERFILE_PATH")
   for f in "$DOCKERFILE_DIR/Dockerfile"*; do
     DOCKERFILE_ARCH=$(basename "$f" | awk -F '.' '{print $NF}')
     if [ "$DOCKERFILE_ARCH" = "Dockerfile" ]; then
       DOCKERFILE_ARCH="amd64"
     fi
-    DOCKERFILE_IMAGE_NAME="$DOCKER_REPO:$DOCKER_TAG_PREFIX$DOCKERFILE_ARCH"
+    DOCKERFILE_IMAGE_NAME="$DOCKER_REPO:$DOCKERHUB_TAG_PREFIX$DOCKERFILE_ARCH"
 
     echo "  - image: $DOCKERFILE_IMAGE_NAME"
     echo "    platform:"
@@ -60,6 +72,6 @@ generate_manifest_list()
 }
 
 GENERATED_MANIFEST_LIST="$(generate_manifest_list)"
-echo "Generated manifest list for manifest-tool:"
+echo "Pushing generated manifest list using manifest-tool:"
 echo "$GENERATED_MANIFEST_LIST"
 ./manifest-tool push from-spec --ignore-missing <(echo "$GENERATED_MANIFEST_LIST")

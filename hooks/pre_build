@@ -3,8 +3,8 @@
 # Run QEMU register script if required
 DOCKERFILE_NAME=$(basename "$DOCKERFILE_PATH")
 if [ "$DOCKERFILE_NAME" == "Dockerfile" ]; then
-  echo 'qemu-user-static: QEMU not required for this build'
+  echo "qemu-user-static: skipping QEMU register script"
 else
   echo 'qemu-user-static: executing QEMU register script'
-  docker run --rm --privileged multiarch/qemu-user-static:register --reset
+  docker run --rm --privileged "multiarch/qemu-user-static:register" --reset
 fi
