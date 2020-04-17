@@ -1,0 +1,10 @@
+FROM arm64v8/golang:alpine as builder
+COPY qemu-aarch64-static /usr/bin/
+RUN mkdir /app
+ADD . /app/
+WORKDIR /app
+RUN go build -o hello .
+
+FROM scratch
+COPY --from=builder /app/hello /
+CMD ["/hello"]

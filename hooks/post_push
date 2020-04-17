@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+
+# Use manifest-tool to create the manifest, given the experimental
+# "docker manifest" command isn't available yet on Docker Hub.
+
+# Download latest manifest-tool
+GITHUB_REPO="estesp/manifest-tool"
+GITHUB_TAGS_URL="https://api.github.com/repos/$GITHUB_REPO/tags"
+GITHUB_LATEST_TAG=$(curl -LSsf "$GITHUB_TAGS_URL" | grep -Eom 1 '"name" *: *"[^"]+"' | awk -F '"' '{print $(NF-1)}')
+MANIFEST_TOOL_DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$GITHUB_LATEST_TAG/manifest-tool-linux-amd64"
+
+echo "Downloading manifest-tool version '$GITHUB_LATEST_TAG' from '$MANIFEST_TOOL_DOWNLOAD_URL'"
+curl -LSsfo manifest-tool "$MANIFEST_TOOL_DOWNLOAD_URL"
+chmod +x manifest-tool
+
+
+# Convert architecture name to platform section of manifest for manifest-tool
+arch_to_manifest_platform()
+{
+  case "$1" in
+    amd64)
+      printf "os: linux\narchitecture: amd64\n" ;;
+    aarch64)
+      printf "os: linux\narchitecture: arm64\nvariant: v8\n" ;;
+    armhf)
+      printf "os: linux\narchitecture: arm\nvariant: v6\n" ;;
+    *)
+      echo "Failed to generate manifest platform, unknown architecture '$1'"
+      exit 1
+    ;;
+  esac
+}
+
+# Collect architectures from dockerfiles and create manifest for manifest-tools
+generate_manifest_list()
+{
+  if [[ "$DOCKER_TAG" == *"-"* ]]; then
+    DOCKER_TAG_PREFIX=$(echo "$DOCKER_TAG" | cut -d '-' -f 1)
+    DOCKER_DST_REPO="$DOCKER_REPO:$DOCKER_TAG_PREFIX"
+    DOCKER_TAG_PREFIX="$DOCKER_TAG_PREFIX-"
+  else
+    DOCKER_DST_REPO="$DOCKER_REPO:latest"
+    DOCKER_TAG_PREFIX=""
+  fi
+  echo "image: $DOCKER_DST_REPO"
+  echo "manifests:"
+
+  DOCKERFILE_DIR=$(dirname "$DOCKERFILE_PATH")
+  for f in "$DOCKERFILE_DIR/Dockerfile"*; do
+    DOCKERFILE_ARCH=$(basename "$f" | awk -F '.' '{print $NF}')
+    if [ "$DOCKERFILE_ARCH" = "Dockerfile" ]; then
+      DOCKERFILE_ARCH="amd64"
+    fi
+    DOCKERFILE_IMAGE_NAME="$DOCKER_REPO:$DOCKER_TAG_PREFIX$DOCKERFILE_ARCH"
+
+    echo "  - image: $DOCKERFILE_IMAGE_NAME"
+    echo "    platform:"
+    arch_to_manifest_platform "$DOCKERFILE_ARCH" | awk '{print "      " $0}'
+  done
+}
+
+GENERATED_MANIFEST_LIST="$(generate_manifest_list)"
+echo "Generated manifest list for manifest-tool:"
+echo "$GENERATED_MANIFEST_LIST"
+./manifest-tool push from-spec --ignore-missing <(echo "$GENERATED_MANIFEST_LIST")

@@ -1,0 +1,10 @@
+FROM arm32v6/golang:alpine as builder
+COPY qemu-arm-static /usr/bin/
+RUN mkdir /app
+ADD . /app/
+WORKDIR /app
+RUN go build -o hello .
+
+FROM scratch
+COPY --from=builder /app/hello /
+CMD ["/hello"]

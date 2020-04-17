@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+# Extract build architecture from Dockerfile extension
+DOCKERFILE_NAME=$(basename "$DOCKERFILE_PATH")
+BUILD_ARCH=$(echo "$DOCKERFILE_NAME" | awk -F '.' '{print $NF}')
+if [ "$BUILD_ARCH" = "Dockerfile" ]; then
+ BUILD_ARCH="amd64"
+fi
+echo "Building image '$IMAGE_NAME' for arch '$BUILD_ARCH' using '$DOCKERFILE_PATH'"
+
+
+# Download latest qemu-user-static, skip QEMU download if building for amd64
+if [ "$BUILD_ARCH" = "amd64" ]; then
+  echo "Skipping QEMU downloading as it is not required for arch '$BUILD_ARCH'"
+else
+  # Map build architecture to QEMU architecture
+  case "$BUILD_ARCH" in
+    amd64)
+      QEMU_ARCH="x86_64" ;;
+    armhf)
+      QEMU_ARCH="arm" ;;
+    *)
+      QEMU_ARCH="$BUILD_ARCH" ;;
+  esac
+
+  GITHUB_REPO="multiarch/qemu-user-static"
+  GITHUB_TAGS_URL="https://api.github.com/repos/$GITHUB_REPO/tags"
+  GITHUB_LATEST_TAG=$(curl -LSsf "$GITHUB_TAGS_URL" | grep -Eom 1 '"name" *: *"[^"]+"' | awk -F '"' '{print $(NF-1)}')
+  QEMU_DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$GITHUB_LATEST_TAG/x86_64_qemu-$QEMU_ARCH-static.tar.gz"
+
+  echo "Downloading qemu-user-static version '$GITHUB_LATEST_TAG' for '$QEMU_ARCH' from '$QEMU_DOWNLOAD_URL'"
+  curl -LSsf "$QEMU_DOWNLOAD_URL" | tar xzv
+fi
